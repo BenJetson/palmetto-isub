@@ -1,0 +1,160 @@
+#!/bin/bash
+
+declare walltime
+declare skip_prompts
+
+declare -A resources
+
+explain=0
+
+while [[ $# -gt 0 ]]; do
+	case $1 in
+		--walltime|--wall|-w)
+			walltime=$2
+			shift
+			shift
+			;;
+		--select|-s) 
+			resources['select']=$2 
+			shift
+			shift
+			;;
+		--ncpus|--cpus|--cores|-c) 
+			resources['ncpus']=$2
+			shift
+			shift
+			;;
+		--mem|--memory|-m) 
+			resources['mem']=$2 
+			shift
+			shift
+			;;
+		--interconnect|-i) 
+			resources['interconnect']=$2 
+			shift
+			shift
+			;;
+		--ngpus|--gpus|-g) 
+			resources['ngpus']=$2 
+			shift
+			shift
+			;;
+		--gpu-model|-gm) 
+			resources['gpu_model']=$2 
+			shift
+			shift
+			;;
+		--phase|-p) 
+			resources['phase']=$2 
+			shift
+			shift
+			;;
+		--default|-d)
+			skip_prompts=1
+			shift
+			;;
+		--explain|-e)
+			explain=1
+			shift
+			;;
+	esac
+done
+
+if [ "${#resources[@]}" -gt 0 ]; then
+	skip_prompts=1
+elif [ -z "$skip_prompts" ]; then 
+	skip_prompts=0
+fi
+
+default_walltime=8:00:00
+if [ -z "$walltime" ]; then 
+	if [ $skip_prompts -eq 1 ]; then
+		walltime="$default_walltime"
+	else
+		read -p "How much walltime? [$default_walltime]: " walltime
+		walltime=${walltime:-$default_walltime}
+	fi
+fi
+
+prompt_parameter() {
+	# $1 - parameter name (example: ncpus or mem)
+	# $2 - prompt text
+	# $3 - default value
+
+	param_name=$1
+	prompt=$2
+	default=$3
+
+	# Already specified value by argument; skip prompt.
+	if [ -n "${resources[$param_name]}" ]; then
+		return
+	fi
+
+	# Skip prompt if enabled.
+	if [ $skip_prompts -eq 1 ]; then
+		# Accept default if blank.
+		if [ -n "$default" ] && [ -z "${resources[$param_name]}" ]; then
+			resources[$param_name]=$default
+		fi
+		return
+	fi
+
+	# Prompt user for info.
+	read -p "$prompt [$default]: " value
+
+	# If a default value is specified, override blank values.
+	if [ -n "$default" ]; then
+		value=${value:-$default}
+	fi
+
+	# If a value is set, add to resources.
+	if [ -n "$value" ]; then
+		resources[$param_name]="$value"
+	fi
+}
+
+prompt_parameter 		"select" 	"How many nodes?" 	"1"
+prompt_parameter 		"ncpus"		"How many CPU cores?"	"2"
+prompt_parameter 		"mem" 		"How much memory?" 	"4gb"
+prompt_parameter	 	"interconnect" 	"Which interconnect?"	"1g"
+prompt_parameter 		"ngpus"		"How many GPUs?"	""
+[ -n "${resources['ngpus']}" ] && \
+	prompt_parameter	 "gpu_model"	"What GPU model?"	"" \
+prompt_parameter 		"phase"		"Which phase?"		""
+
+# Make sure memory ends with gb.
+if [[ ${resources['mem']} != *gb ]]; then
+	resources['mem']+='gb'
+fi
+
+# Must set select first in resource string.
+resource_string="select=${resources['select']}:"
+unset resources['select']
+
+counter=0
+for key in "${!resources[@]}"; do
+	resource_string+="$key=${resources[$key]}"
+
+	((counter++))
+	if [ $counter -ne ${#resources[@]} ]; then
+		resource_string+=":"
+	fi
+done 
+
+echo
+
+if [[ $explain -eq 1 ]]; then
+	echo "This will execute:"
+	echo "\$ qsub -I -l $resource_string,walltime=$walltime"
+	echo
+	read -r -p "Do you confirm this command? [y/N]: " confirm
+	case "$confirm" in
+		y|Y) echo ;;
+		*) exit 0 ;;
+	esac
+fi
+
+( 
+	set -x;
+	qsub -I -l $resource_string,walltime=$walltime
+)
