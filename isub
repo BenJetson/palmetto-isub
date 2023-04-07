@@ -14,39 +14,43 @@ while [[ $# -gt 0 ]]; do
 			shift
 			shift
 			;;
-		--select|-s) 
-			resources['select']=$2 
+		--select|-s)
+			resources['select']=$2
 			shift
 			shift
 			;;
-		--ncpus|--cpus|--cores|-c) 
+		--ncpus|--cpus|--cores|-c)
 			resources['ncpus']=$2
 			shift
 			shift
 			;;
-		--mem|--memory|-m) 
-			resources['mem']=$2 
+		--mem|--memory|-m)
+			resources['mem']=$2
 			shift
 			shift
 			;;
-		--interconnect|-i) 
-			resources['interconnect']=$2 
+		--interconnect|-i)
+			resources['interconnect']=$2
 			shift
 			shift
 			;;
-		--ngpus|--gpus|-g) 
-			resources['ngpus']=$2 
+		--ngpus|--gpus|-g)
+			resources['ngpus']=$2
 			shift
 			shift
 			;;
-		--gpu-model|-gm) 
-			resources['gpu_model']=$2 
+		--gpu-model|-gm)
+			resources['gpu_model']=$2
 			shift
 			shift
 			;;
-		--phase|-p) 
-			resources['phase']=$2 
+		--phase|-p)
+			resources['phase']=$2
 			shift
+			shift
+			;;
+		--ask|-a)
+			skip_prompts=0
 			shift
 			;;
 		--default|-d)
@@ -60,14 +64,16 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-if [ "${#resources[@]}" -gt 0 ]; then
-	skip_prompts=1
-elif [ -z "$skip_prompts" ]; then 
-	skip_prompts=0
+if [ -z "$skip_prompts" ]; then
+	if [ "${#resources[@]}" -gt 0 ]; then
+		skip_prompts=1
+	else
+		skip_prompts=0
+	fi
 fi
 
 default_walltime=8:00:00
-if [ -z "$walltime" ]; then 
+if [ -z "$walltime" ]; then
 	if [ $skip_prompts -eq 1 ]; then
 		walltime="$default_walltime"
 	else
@@ -139,7 +145,7 @@ for key in "${!resources[@]}"; do
 	if [ $counter -ne ${#resources[@]} ]; then
 		resource_string+=":"
 	fi
-done 
+done
 
 echo
 
@@ -154,7 +160,7 @@ if [[ $explain -eq 1 ]]; then
 	esac
 fi
 
-( 
+(
 	set -x;
 	qsub -I -l $resource_string,walltime=$walltime
 )
